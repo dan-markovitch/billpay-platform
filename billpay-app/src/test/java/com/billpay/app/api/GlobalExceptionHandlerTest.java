@@ -40,4 +40,14 @@ class GlobalExceptionHandlerTest {
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.error").value("Resource not found"));
     }
+
+    @Test
+    void malformedJson_returns400_withErrorEnvelope() throws Exception {
+        mockMvc.perform(post("/api/v1/_probe/validation")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ not valid"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.error").value("Invalid request body"));
+    }
 }

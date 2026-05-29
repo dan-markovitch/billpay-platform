@@ -154,6 +154,44 @@ class TransactionControllerTest {
             .andExpect(jsonPath("$.error", containsString("currency")));
     }
 
+    @Test
+    void create_rejectsBlankDescription() throws Exception {
+        mockMvc.perform(post("/api/v1/transactions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validTransactionJson("", "10.00")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.error", containsString("description")));
+    }
+
+    @Test
+    void create_rejectsMissingRequiredFields() throws Exception {
+        mockMvc.perform(post("/api/v1/transactions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void create_rejectsMalformedJson() throws Exception {
+        mockMvc.perform(post("/api/v1/transactions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ bad-json"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.error").value("Invalid request body"));
+    }
+
+    @Test
+    void getById_returns400_forInvalidUuidFormat() throws Exception {
+        mockMvc.perform(get("/api/v1/transactions/{id}", "not-a-uuid"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.error", containsString("Invalid value for parameter")));
+    }
+
     private static String validTransactionJson(String description, String amount) {
         return """
             {

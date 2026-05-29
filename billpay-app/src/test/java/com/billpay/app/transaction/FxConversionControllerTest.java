@@ -167,6 +167,27 @@ class FxConversionControllerTest {
     }
 
     @Test
+    void convert_returns400_forLowercaseTargetCurrency() throws Exception {
+        String transactionId = createUsdTransaction("10.00");
+
+        mockMvc.perform(get("/api/v1/transactions/{id}/convert", transactionId)
+                .param("targetCurrency", "usd"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.error", containsString("targetCurrency")));
+    }
+
+    @Test
+    void convert_returns400_whenTargetCurrencyMissing() throws Exception {
+        String transactionId = createUsdTransaction("10.00");
+
+        mockMvc.perform(get("/api/v1/transactions/{id}/convert", transactionId))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.error", containsString("targetCurrency")));
+    }
+
+    @Test
     void convert_returns400_forUnsupportedSourceCurrency() throws Exception {
         String transactionId = createTransaction("SEK", "10.00");
 
