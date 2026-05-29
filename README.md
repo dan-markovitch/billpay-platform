@@ -62,10 +62,44 @@ Response:
   "success": true,
   "data": {
     "status": "UP",
-    "service": "billpay-platform"
+    "service": "billpay-platform",
+    "database": "UP"
   }
 }
 ```
+
+### Invoices (Bill Processing)
+
+`POST /api/v1/invoices` — ingest invoice (returns **201**, status `RECEIVED`)
+
+Request:
+```json
+{
+  "externalReference": "INV-1001",
+  "amount": 250.00,
+  "currency": "USD"
+}
+```
+
+`GET /api/v1/invoices/{id}` — get by id
+
+Duplicate `externalReference` returns **409**.
+
+### Payment Sessions (Payment Automation)
+
+`POST /api/v1/payment-sessions` — start a payment session (returns **201**, status `INITIATED`)
+
+Request:
+```json
+{
+  "channel": "WEB",
+  "merchantId": "merchant-42"
+}
+```
+
+`channel` must be `WEB` (browser autofill) or `IVR` (phone automation).
+
+`GET /api/v1/payment-sessions/{id}` — get by id
 
 ### Transactions
 
