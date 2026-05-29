@@ -1,24 +1,27 @@
 package com.billpay.app.api;
 
 import com.billpay.common.api.GlobalExceptionHandler;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = ValidationProbeController.class)
-@Import(GlobalExceptionHandler.class)
 class GlobalExceptionHandlerTest {
 
-    @Autowired
     private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(new ValidationProbeController())
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+    }
 
     @Test
     void validationErrors_return400_withErrorEnvelope() throws Exception {

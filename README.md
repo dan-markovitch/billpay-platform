@@ -67,6 +67,30 @@ Response:
 }
 ```
 
+### Transactions
+
+`POST /api/v1/transactions` — create (returns **201**)
+
+Request:
+```json
+{
+  "description": "Electric bill",
+  "amount": 125.50,
+  "currency": "USD",
+  "transactionDate": "2026-05-28"
+}
+```
+
+Validation rules:
+- `description` — required, max 50 characters (not trimmed)
+- `amount` — required, must be greater than zero
+- `currency` — required, 3-letter uppercase ISO code (e.g. `USD`)
+- `transactionDate` — required, cannot be in the future
+
+`GET /api/v1/transactions/{id}` — get by id
+
+`GET /api/v1/transactions` — list all (newest first)
+
 All responses follow this envelope:
 - Success: `{ "success": true, "data": { ... } }`
 - Error: `{ "success": false, "error": "descriptive message" }`
