@@ -1,6 +1,6 @@
 package com.billpay.app.api;
 
-import org.springframework.http.ResponseEntity;
+import com.billpay.common.api.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -12,13 +12,10 @@ import java.util.Map;
 public class HealthController {
 
     @GetMapping("/health")
-    public ResponseEntity<Map<String, Object>> health() {
-        return ResponseEntity.ok(Map.of(
-            "success", true,
-            "data", Map.of(
-                "status", "UP",
-                "service", "billpay-platform"
-            )
+    public ApiResponse<Map<String, String>> health() {
+        return ApiResponse.ok(Map.of(
+            "status", "UP",
+            "service", "billpay-platform"
         ));
     }
 }
