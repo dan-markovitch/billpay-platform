@@ -91,6 +91,31 @@ Validation rules:
 
 `GET /api/v1/transactions` — list all (newest first)
 
+`GET /api/v1/transactions/{id}/convert?targetCurrency=USD` — convert amount to another currency
+
+Uses live [U.S. Treasury Fiscal Data](https://fiscaldata.treasury.gov/api-documentation/) exchange rates (`rates_of_exchange`). Rate selection rules:
+
+- Use the most recent Treasury `record_date` that is **on or before** the transaction date (no exact-date match required)
+- That rate must be within the **last 6 months** of the transaction date
+- Returns **400** with a clear error when no qualifying rate exists
+- Cross-currency conversions go through USD using Treasury rates (foreign units per one U.S. dollar)
+
+Example response:
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId": "...",
+    "sourceCurrency": "EUR",
+    "targetCurrency": "USD",
+    "originalAmount": 100.00,
+    "convertedAmount": 117.5088,
+    "exchangeRate": 1.1751,
+    "exchangeRateDate": "2025-12-31"
+  }
+}
+```
+
 All responses follow this envelope:
 - Success: `{ "success": true, "data": { ... } }`
 - Error: `{ "success": false, "error": "descriptive message" }`

@@ -28,3 +28,7 @@ management:
     web:
       exposure:
         include: health,info
+
+billpay:
+  treasury:
+    base-url: https://api.fiscaldata.treasury.gov/services/api/fiscal_service
