@@ -2,7 +2,9 @@ package com.billpay.app.transaction;
 
 import com.billpay.billprocessing.fx.treasury.TreasuryExchangeRateClient;
 import com.billpay.billprocessing.fx.treasury.TreasuryRateRecord;
+import com.billpay.common.api.ApiException;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -162,6 +164,31 @@ class FxConversionControllerTest {
                 .param("targetCurrency", "ZZZ"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error", containsString("Unsupported currency")));
+    }
+
+    @Test
+    void convert_returns400_forUnsupportedSourceCurrency() throws Exception {
+        String transactionId = createTransaction("SEK", "10.00");
+
+        mockMvc.perform(get("/api/v1/transactions/{id}/convert", transactionId)
+                .param("targetCurrency", "USD"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error", containsString("Unsupported currency")));
+    }
+
+    @Test
+    void convert_returns503_whenTreasuryIsUnavailable() throws Exception {
+        when(treasuryExchangeRateClient.fetchRates(eq("Euro Zone-Euro"), any(), any()))
+            .thenThrow(new ApiException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Treasury exchange rate service is unavailable"
+            ));
+        String transactionId = createEurTransaction("10.00");
+
+        mockMvc.perform(get("/api/v1/transactions/{id}/convert", transactionId)
+                .param("targetCurrency", "USD"))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(jsonPath("$.error", containsString("Treasury")));
     }
 
     private void stubEuroRates(TreasuryRateRecord... rates) {

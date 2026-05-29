@@ -1,8 +1,12 @@
 package com.billpay.billprocessing.fx.treasury;
 
+import com.billpay.common.api.ApiException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.time.LocalDate;
@@ -37,11 +41,26 @@ public class TreasuryExchangeRateClientImpl implements TreasuryExchangeRateClien
             .encode()
             .toUriString();
 
-        TreasuryRatesResponse response = restClient.get()
-            .uri(uri)
-            .retrieve()
-            .body(TreasuryRatesResponse.class);
+        try {
+            TreasuryRatesResponse response = restClient.get()
+                .uri(uri)
+                .retrieve()
+                .body(TreasuryRatesResponse.class);
 
-        return response != null && response.data() != null ? response.data() : List.of();
+            return response != null && response.data() != null ? response.data() : List.of();
+        } catch (RestClientResponseException ex) {
+            HttpStatus status = ex.getStatusCode().is5xxServerError()
+                ? HttpStatus.SERVICE_UNAVAILABLE
+                : HttpStatus.BAD_GATEWAY;
+            throw new ApiException(
+                status,
+                "Unable to retrieve exchange rates from Treasury (HTTP %d)".formatted(ex.getStatusCode().value())
+            );
+        } catch (ResourceAccessException ex) {
+            throw new ApiException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Treasury exchange rate service is unavailable"
+            );
+        }
     }
 }

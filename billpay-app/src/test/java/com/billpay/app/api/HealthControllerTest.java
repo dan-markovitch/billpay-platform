@@ -24,6 +24,7 @@ class HealthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.status").value("UP"))
-            .andExpect(jsonPath("$.data.service").value("billpay-platform"));
+            .andExpect(jsonPath("$.data.service").value("billpay-platform"))
+            .andExpect(jsonPath("$.data.database").value("UP"));
     }
 }
