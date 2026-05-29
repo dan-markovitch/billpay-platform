@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: billpay-platform
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/billpay
+    username: billpay
+    password: billpay
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
