@@ -1,62 +1,138 @@
 # billpay-platform
 
-Bill Pay SaaS platform supporting Payment Automation and Bill Processing.
+[![CI](https://github.com/dan-markovitch/billpay-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/dan-markovitch/billpay-platform/actions/workflows/ci.yml)
 
-## Architecture
+Bill Pay SaaS platform supporting **Payment Automation** and **Bill Processing** — a Java Spring Boot monorepo with persisted APIs, Treasury FX conversion, and automated tests.
 
-This project uses a **monorepo, single deployable** structure:
+## Quick start
 
-| Module | Role |
-|---|---|
-| `billpay-common` | Shared models, API response envelopes, validation utilities |
-| `billpay-bill-processing` | Invoice capture, data extraction, processing workflow |
-| `billpay-payment-automation` | Web autofill and IVR phone payment automation |
-| `billpay-app` | Spring Boot entry point — assembles all modules into one JAR |
-
-### Why a single deployable?
-Microservices were considered but ruled out for this implementation.
-Module boundaries reflect real service ownership and could be extracted
-independently. For a portfolio project, one runnable app eliminates
-operational complexity without sacrificing architectural clarity.
-
-### Why Postgres from day one?
-The platform roadmap includes an Oracle → Postgres migration.
-Building greenfield on Postgres demonstrates the target state.
-Flyway manages schema versioning — the same approach used in production migrations.
-
-## Prerequisites
-
-- Java 17+
-- Maven 3.9+
-- Docker Desktop
-
-## Running Locally
+**Run tests only** (no Docker required):
 
 ```bash
-# Start Postgres
-docker compose up -d
+git clone https://github.com/dan-markovitch/billpay-platform.git
+cd billpay-platform
+mvn clean verify
+```
 
-# Build and run
+**Run the app** (requires Docker for Postgres):
+
+```bash
+docker compose up -d
 mvn clean package -DskipTests
 java -jar billpay-app/target/billpay-app-0.0.1-SNAPSHOT.jar
 ```
 
-## Running Tests
+Health check: `curl http://localhost:8080/api/v1/health`
+
+## Prerequisites
+
+| Need | When |
+|------|------|
+| Java 17+ | Always |
+| Maven 3.9+ | Always |
+| Docker Desktop | Running the app locally (Postgres via `docker compose`) |
+| Network access | FX conversion calls the live [U.S. Treasury Fiscal Data API](https://fiscaldata.treasury.gov/api-documentation/) |
+
+## Architecture
+
+Monorepo, **single deployable** — one Spring Boot JAR, module boundaries aligned to team ownership:
+
+| Module | Role |
+|--------|------|
+| `billpay-common` | Shared `ApiResponse` envelope, `ApiException`, global error handling |
+| `billpay-bill-processing` | Invoice ingest, transactions, Treasury FX conversion |
+| `billpay-payment-automation` | Web autofill and IVR payment session stubs |
+| `billpay-app` | Entry point, Flyway migrations, Postgres config, assembles all modules |
+
+```
+HTTP request
+    → Controller (validation)
+    → Service (business rules)
+    → Repository (JPA / Postgres)
+```
+
+### Design decisions
+
+- **Single deployable over microservices** — modules could be extracted later; one JAR keeps local and CI setup simple while preserving clear boundaries.
+- **Postgres + Flyway from day one** — matches the platform's Oracle → Postgres migration target; schema lives in `billpay-app/src/main/resources/db/migration/`.
+- **H2 for default tests, Postgres for runtime** — `mvn verify` uses the `test` profile (in-memory H2, no Docker). Running the JAR uses Postgres from `docker compose`.
+- **Real Treasury API in application code** — FX conversion calls `rates_of_exchange` at runtime; tests mock the HTTP client.
+- **Consistent API envelope** — all endpoints return `{ "success", "data" }` or `{ "success", "error" }` with appropriate HTTP status codes.
+
+## Running tests
 
 ```bash
 mvn clean verify
 ```
 
-Tests use the `test` profile with an in-memory H2 database (`mvn clean verify` runs without Docker). A Testcontainers + Postgres profile (`application-test.yml`) is included for integration tests once Docker is available.
+CI runs the same command on every push/PR to `main` (see [GitHub Actions](https://github.com/dan-markovitch/billpay-platform/actions)).
 
-## API
+Test layout:
+- **Unit / slice tests** — e.g. `TreasuryExchangeRateClientImplTest`, `GlobalExceptionHandlerTest`
+- **Integration tests** — `@SpringBootTest` + MockMvc against H2 (`@ActiveProfiles("test")`)
+
+## API reference
 
 Base URL: `http://localhost:8080/api/v1`
 
+All responses use:
+
+```json
+{ "success": true, "data": { ... } }
+```
+
+```json
+{ "success": false, "error": "descriptive message" }
+```
+
+### End-to-end example (curl)
+
+```bash
+# 1. Health
+curl -s http://localhost:8080/api/v1/health | jq
+
+# 2. Create a transaction
+curl -s -X POST http://localhost:8080/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Electric bill",
+    "amount": 100.00,
+    "currency": "EUR",
+    "transactionDate": "2026-05-28"
+  }' | jq
+# Save the "id" from the response as TX_ID
+
+# 3. Convert to USD (calls live Treasury API)
+curl -s "http://localhost:8080/api/v1/transactions/$TX_ID/convert?targetCurrency=USD" | jq
+
+# 4. Ingest an invoice
+curl -s -X POST http://localhost:8080/api/v1/invoices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "externalReference": "INV-1001",
+    "amount": 250.00,
+    "currency": "USD"
+  }' | jq
+
+# 5. Start a payment session (WEB or IVR)
+curl -s -X POST http://localhost:8080/api/v1/payment-sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "WEB",
+    "merchantId": "merchant-42"
+  }' | jq
+```
+
+> **Windows PowerShell:** use `curl.exe` instead of `curl` if the alias points to `Invoke-WebRequest`.
+
+---
+
 ### Health
+
 `GET /api/v1/health`
 
-Response:
+Returns **200** when app and database are up; **503** if the database is unreachable.
+
 ```json
 {
   "success": true,
@@ -68,44 +144,19 @@ Response:
 }
 ```
 
-### Invoices (Bill Processing)
-
-`POST /api/v1/invoices` — ingest invoice (returns **201**, status `RECEIVED`)
-
-Request:
-```json
-{
-  "externalReference": "INV-1001",
-  "amount": 250.00,
-  "currency": "USD"
-}
-```
-
-`GET /api/v1/invoices/{id}` — get by id
-
-Duplicate `externalReference` returns **409**.
-
-### Payment Sessions (Payment Automation)
-
-`POST /api/v1/payment-sessions` — start a payment session (returns **201**, status `INITIATED`)
-
-Request:
-```json
-{
-  "channel": "WEB",
-  "merchantId": "merchant-42"
-}
-```
-
-`channel` must be `WEB` (browser autofill) or `IVR` (phone automation).
-
-`GET /api/v1/payment-sessions/{id}` — get by id
+---
 
 ### Transactions
 
-`POST /api/v1/transactions` — create (returns **201**)
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/transactions` | Create (returns **201**) |
+| `GET` | `/transactions/{id}` | Get by id |
+| `GET` | `/transactions` | List all (newest first) |
+| `GET` | `/transactions/{id}/convert?targetCurrency=USD` | FX conversion |
 
-Request:
+**Create request:**
+
 ```json
 {
   "description": "Electric bill",
@@ -115,41 +166,80 @@ Request:
 }
 ```
 
-Validation rules:
-- `description` — required, max 50 characters (not trimmed)
-- `amount` — required, must be greater than zero
-- `currency` — required, 3-letter uppercase ISO code (e.g. `USD`)
-- `transactionDate` — required, cannot be in the future
+**Validation:**
+- `description` — required, max **50** characters (not trimmed)
+- `amount` — required, must be **> 0**
+- `currency` — required, 3-letter uppercase ISO code
+- `transactionDate` — required, cannot be in the **future**
 
-`GET /api/v1/transactions/{id}` — get by id
+**FX conversion** uses [Treasury `rates_of_exchange`](https://fiscaldata.treasury.gov/datasets/treasury-reporting-rates-exchange/):
+- Most recent `record_date` **on or before** the transaction date
+- Rate must be within the **last 6 months**
+- Cross-currency conversion routes through USD
+- **400** when no qualifying rate exists; **503** when Treasury is unavailable
 
-`GET /api/v1/transactions` — list all (newest first)
+---
 
-`GET /api/v1/transactions/{id}/convert?targetCurrency=USD` — convert amount to another currency
+### Invoices (Bill Processing)
 
-Uses live [U.S. Treasury Fiscal Data](https://fiscaldata.treasury.gov/api-documentation/) exchange rates (`rates_of_exchange`). Rate selection rules:
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/invoices` | Ingest invoice (returns **201**, status `RECEIVED`) |
+| `GET` | `/invoices/{id}` | Get by id |
 
-- Use the most recent Treasury `record_date` that is **on or before** the transaction date (no exact-date match required)
-- That rate must be within the **last 6 months** of the transaction date
-- Returns **400** with a clear error when no qualifying rate exists
-- Cross-currency conversions go through USD using Treasury rates (foreign units per one U.S. dollar)
-
-Example response:
 ```json
 {
-  "success": true,
-  "data": {
-    "transactionId": "...",
-    "sourceCurrency": "EUR",
-    "targetCurrency": "USD",
-    "originalAmount": 100.00,
-    "convertedAmount": 117.5088,
-    "exchangeRate": 1.1751,
-    "exchangeRateDate": "2025-12-31"
-  }
+  "externalReference": "INV-1001",
+  "amount": 250.00,
+  "currency": "USD"
 }
 ```
 
-All responses follow this envelope:
-- Success: `{ "success": true, "data": { ... } }`
-- Error: `{ "success": false, "error": "descriptive message" }`
+Duplicate `externalReference` → **409 Conflict**.
+
+---
+
+### Payment sessions (Payment Automation)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/payment-sessions` | Create session (returns **201**, status `INITIATED`) |
+| `GET` | `/payment-sessions/{id}` | Get by id |
+
+```json
+{
+  "channel": "WEB",
+  "merchantId": "merchant-42"
+}
+```
+
+`channel`: `WEB` (browser autofill) or `IVR` (phone automation).
+
+---
+
+## Database migrations
+
+Flyway migrations in `billpay-app/src/main/resources/db/migration/`:
+
+| Version | Description |
+|---------|-------------|
+| V1 | Initial schema |
+| V2 | Transactions |
+| V3 | Invoices |
+| V4 | Payment sessions |
+
+## Project layout
+
+```
+billpay-platform/
+├── billpay-common/              # ApiResponse, ApiException, GlobalExceptionHandler
+├── billpay-bill-processing/     # Transactions, invoices, Treasury FX
+├── billpay-payment-automation/  # Payment sessions (WEB / IVR)
+├── billpay-app/                 # Spring Boot app, Flyway, docker-compose target
+├── docker-compose.yml           # Postgres 16 for local runtime
+└── .github/workflows/ci.yml     # mvn verify on push/PR
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
